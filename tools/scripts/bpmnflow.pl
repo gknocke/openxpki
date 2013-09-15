@@ -1,4 +1,4 @@
-#usage: perl bpmnflow_v0_1.pl bpmnflow_example.bpmn
+#!/usr/bin/perl
 
 ### TO DO###
 #where to get the namespace? not in bpmn file yet
@@ -226,7 +226,7 @@ sub handleAction {
 	my $conditions = shift || [];
 	my $object = ObjStateAction->new();
 	$object->name($action->{name});
-	$object->resState(shift(getNextElements($action->{id}))->{name});
+	$object->resState(shift(@{getNextElements($action->{id})})->{name});
 	$object->conditions($conditions);
 	push(@{$state->{action}}, $object);
 }
@@ -287,7 +287,7 @@ sub createStateChilds {
 	my $state = shift;
 	if ($state->{type} eq 'state') {
 		#states only have one next element: action or condition
-		my $element = shift(getNextElements($state->{id}));
+		my $element = shift(@{getNextElements($state->{id})});
 		if ($element->{type} eq 'action') {
 			handleAction($state, $element);
 		}
@@ -433,8 +433,20 @@ sub parseGateway {
 
 #main routine starts
 
-my $outfile = undef;
-my $infile ||= $ARGV[0];
+use Getopt::Long;
+
+my ($infile, $outfile, $outtype);
+
+
+my $result = GetOptions(
+    "infile=s"    => \$infile,
+    "outfile=s"   => \$outfile,
+    "outtype=s"   => \$outtype,
+    "namespace=s" => \$namespace,
+);
+
+$infile ||= $ARGV[0];
+
 unless ( open FILE, $infile ) {
     die("Could not open $infile");
 }
@@ -460,66 +472,72 @@ my $imprint
     . join( ', ', @ARGV ) . '" -->' . "\n\n";
 	
 # write action definitions to file
-my $defName = $outfile
-	|| 'workflow_activity_' . lc($descPrefix) . '.xml';
-open( DEF, ">$defName" ) or die "Error opening $defName: $!";
-my $indent = 0;
-print DEF $imprint, "\n";
-print DEF $indentSpace x $indent, '<actions>', "\n\n";
-$indent++;
+if ( not $outtype or $outtype eq 'actions' ) {
+	my $defName = $outfile
+		|| 'workflow_activity_' . lc($descPrefix) . '.xml';
+	open( DEF, ">$defName" ) or die "Error opening $defName: $!";
+	my $indent = 0;
+	print DEF $imprint, "\n";
+	print DEF $indentSpace x $indent, '<actions>', "\n\n";
+	$indent++;
 
-foreach my $rec ( grep{defined($_->{type}) && $_->{type} eq 'action'}  @objs) {
-	print DEF $rec->dump($indent), "\n";
-	}
-	
-$indent--;
-print DEF $indentSpace x $indent, '</actions>', "\n";
-close DEF;
+	foreach my $rec ( grep{defined($_->{type}) && $_->{type} eq 'action'}  @objs) {
+		print DEF $rec->dump($indent), "\n";
+		}
+		
+	$indent--;
+	print DEF $indentSpace x $indent, '</actions>', "\n";
+	close DEF;
+}
 
 # write condition definitions to file
-$defName = $outfile
-	|| 'workflow_condition_' . lc($descPrefix) . '.xml';
-open( DEF, ">$defName" ) or die "Error opening $defName: $!";
-$indent = 0;
-print DEF $imprint, "\n";
-print DEF $indentSpace x $indent, '<conditions>', "\n\n";
-$indent++;
+if ( not $outtype or $outtype eq 'conditions' ) {
+	my $defName = $outfile
+		|| 'workflow_condition_' . lc($descPrefix) . '.xml';
+	open( DEF, ">$defName" ) or die "Error opening $defName: $!";
+	my $indent = 0;
+	print DEF $imprint, "\n";
+	print DEF $indentSpace x $indent, '<conditions>', "\n\n";
+	$indent++;
 
-foreach my $rec ( grep{defined($_->{type}) && $_->{type} eq 'condition'}  @objs) {
-	print DEF $rec->dump($indent), "\n";
-	}
-	
-$indent--;
-print DEF $indentSpace x $indent, '</conditions>', "\n";
-close DEF;
+	foreach my $rec ( grep{defined($_->{type}) && $_->{type} eq 'condition'}  @objs) {
+		print DEF $rec->dump($indent), "\n";
+		}
+		
+	$indent--;
+	print DEF $indentSpace x $indent, '</conditions>', "\n";
+	close DEF;
+}
 
 # write state definitions to file
-$defName = $outfile
-	|| 'workflow_def_' . lc($descPrefix) . '.xml';
-open( DEF, ">$defName" ) or die "Error opening $defName: $!";
-$indent = 0;
-print DEF $imprint, "\n";
-print DEF $indentSpace x $indent, '<workflow>', "\n";
-    $indent++;
-    print DEF $indentSpace x $indent, '<type>',
-        $i18nPrefix, '_TYPE_', uc($descPrefix),
-        '</type>', "\n";
-    print DEF $indentSpace x $indent, '<description>',
-        $i18nPrefix, '_DESC_', uc($descPrefix),
-        '</description>', "\n";
-    print DEF $indentSpace x $indent,
-        '<persister>OpenXPKI</persister>',
-        "\n\n";
+if ( not $outtype or $outtype eq 'states' ) {
+	my $defName = $outfile
+		|| 'workflow_def_' . lc($descPrefix) . '.xml';
+	open( DEF, ">$defName" ) or die "Error opening $defName: $!";
+	my $indent = 0;
+	print DEF $imprint, "\n";
+	print DEF $indentSpace x $indent, '<workflow>', "\n";
+		$indent++;
+		print DEF $indentSpace x $indent, '<type>',
+			$i18nPrefix, '_TYPE_', uc($descPrefix),
+			'</type>', "\n";
+		print DEF $indentSpace x $indent, '<description>',
+			$i18nPrefix, '_DESC_', uc($descPrefix),
+			'</description>', "\n";
+		print DEF $indentSpace x $indent,
+			'<persister>OpenXPKI</persister>',
+			"\n\n";
 
-#this one greps every unique state
-my %seen;
-my @unique = grep{$_->{type} eq 'state' &&
-				! $seen{$_->{name}}++ } @objs;
+	#this one greps every unique state
+	my %seen;
+	my @unique = grep{$_->{type} eq 'state' &&
+					! $seen{$_->{name}}++ } @objs;
 
-foreach my $rec (@unique) {
-	print DEF $rec->dump($indent), "\n";
+	foreach my $rec (@unique) {
+		print DEF $rec->dump($indent), "\n";
+	}
+		
+	$indent--;
+	print DEF $indentSpace x $indent, '</workflow>', "\n";
+	close DEF;
 }
-	
-$indent--;
-print DEF $indentSpace x $indent, '</workflow>', "\n";
-close DEF;
