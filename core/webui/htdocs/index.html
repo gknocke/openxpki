@@ -16,6 +16,8 @@
     <link href="css/jquery.dataTables.css" rel="stylesheet">
     <!-- CSS for Datepicker --> 
     <link href="css/datepicker.css" rel="stylesheet">
+    <!-- CSS for Timepicker --> 
+    <link href="css/bootstrap-timepicker.css" rel="stylesheet">
     <!-- CSS for context menu --> 
     <link href="css/jquery.contextMenu.css" rel="stylesheet">
     <!-- Custom styles for this project -->
@@ -329,8 +331,16 @@
     </div>
     </script>
     
-    
-    
+	<script type="text/x-handlebars" data-template-name="text-time">
+       <label {{bind-attr for=view.fieldname}} class="col-lg-2 control-label">{{view.label}}</label>
+        <div class="col-lg-2 bootstrap-timepicker input-small">	
+          {{view view.FieldView}}
+          {{#if view._hasError}}	 
+          <span class="help-block">{{view.getErrorsAsString}}</span>
+          {{/if}}
+        </div>
+    </script>
+       
     <script type="text/x-handlebars" data-template-name="grid-view">
       {{#if view.label}}<h3>{{view.label}}</h3>{{/if}}
      {{#if view.description}}<div style="margin-bottom:12px;">{{view.description}}</div>{{/if}}
@@ -371,6 +381,7 @@
     <script src="js/libs/jquery.ui.position.js"></script>
     <script src="js/libs/jquery.contextMenu.js"></script>
     <script src="js/libs/bootstrap-datepicker.js"></script>
+    <script src="js/libs/bootstrap-timepicker.js"></script>
     <script src="js/bootstrap.min.js"></script>
     <script src="js/utils.js"></script>
     <script src="js/libs/handlebars-1.0.0.js"></script>

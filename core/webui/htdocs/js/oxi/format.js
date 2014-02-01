@@ -7,6 +7,7 @@ OXI.FormatHelperFactory = OXI.ComponentFactory.create({
     _componentMap : {
         timestamp :  'FormatTimestamp',
         link      :  'FormatLink',
+        email     :  'FormatEmail',
         certstatus:  'FormatCertStatus'
     },
 
@@ -62,6 +63,28 @@ OXI.FormatLink  = OXI.FormatHelper.extend({
         $link.appendTo($outer);                
         return $outer.html();
 
+    }
+});
+
+/*Format Email*/
+OXI.FormatEmail  = OXI.FormatHelper.extend({
+    format: function(email){
+		/*stupid regex for basic typos*/	
+		if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.label)){
+			App.applicationAlert('Syntax error in email: ' + email.label);
+			return;
+		}
+		
+        var email_id = OXI.getUniqueId();
+        
+        OXI.registerMethod(email_id,function(){
+    		App.handleAction(email);
+        });
+        var $email = $('<a/>').html(email.label).attr('id',email_id).attr('href','mailto:' + email.label).attr('onclick',"OXI.callMethod('"+email_id+"');");        
+       
+        var $outer =   $('<div/>');   
+        $email.appendTo($outer);                
+        return $outer.html();
     }
 });
 

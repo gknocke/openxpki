@@ -48,6 +48,7 @@ OXI.FormFieldFactory = OXI.ComponentFactory.create({
         select :    'PulldownContainer',
         checkbox:   'CheckboxContainer',
     	date :      'DateFieldContainer',
+    	time :		'TimeFieldContainer',
     	bool :      'CheckboxContainer'    	
     }
 

@@ -516,6 +516,24 @@ OXI.DateFieldContainer = OXI.TextFieldContainer.extend({
     _lastItem: '' //avoid trailing commas
 });
 
+OXI.TimeFieldContainer = OXI.TextFieldContainer.extend({
+	templateName: "text-time",
+    jsClassName:'OXI.TimeFieldContainer',
+    init:function(){
+        this._super();
+    },
+    
+	didInsertElement: function() {
+		this._super();
+		this.$('input').timepicker({
+			minutestep: 15,
+			showMeridian: false,
+		});
+		},	
+			    
+    _lastItem: '' //avoid trailing commas
+});
+
 OXI.CheckboxContainer = OXI.FormFieldContainer.extend({
     templateName: "form-checkbox",
     jsClassName:'OXI.CheckboxContainer',
