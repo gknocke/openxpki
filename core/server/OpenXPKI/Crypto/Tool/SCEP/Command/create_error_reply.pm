@@ -1,6 +1,6 @@
-## OpenXPKI::Crypto::Tool::SCEP::Command::create_error_reply.pm
-## Written 2006 by Alexander Klink for the OpenXPKI project
-## (C) Copyright 2006 by The OpenXPKI Project
+## OpenXPKI::Crypto::Tool::SCEP::Command::create_error_reply
+## Written 2015 by Gideon Knocke for the OpenXPKI project
+## (C) Copyright 20015 by The OpenXPKI Project
 package OpenXPKI::Crypto::Tool::SCEP::Command::create_error_reply;
 
 use strict;
@@ -9,12 +9,8 @@ use warnings;
 use Class::Std;
 
 use OpenXPKI::Debug;
-use OpenXPKI::FileUtils;
-use Data::Dumper;
+use Crypt::LibSCEP;
 
-my %fu_of      :ATTR; # a FileUtils instance
-my %outfile_of :ATTR;
-my %tmp_of     :ATTR;
 my %pkcs7_of   :ATTR;
 my %engine_of  :ATTR;
 my %error_of   :ATTR;
@@ -23,19 +19,17 @@ my %hash_alg_of  :ATTR;
 sub START {
     my ($self, $ident, $arg_ref) = @_;
 
-    $fu_of    {$ident} = OpenXPKI::FileUtils->new();
     $engine_of{$ident} = $arg_ref->{ENGINE};
-    $tmp_of   {$ident} = $arg_ref->{TMP};
     $pkcs7_of {$ident} = $arg_ref->{PKCS7};
     $error_of {$ident} = $arg_ref->{'ERROR_CODE'};
     $hash_alg_of {$ident} = $arg_ref->{HASH_ALG};
 }
 
-sub get_command {
-    my $self  = shift;
+sub get_result
+{
+    my $self = shift;
     my $ident = ident $self;
 
-    # keyfile, signcert, passin
     if (! defined $engine_of{$ident}) {
         OpenXPKI::Exception->throw(
             message => 'I18N_OPENXPKI_CRYPTO_TOOL_SCEP_COMMAND_CREATE_ERROR_REPLY_NO_ENGINE',
@@ -54,19 +48,23 @@ sub get_command {
             message => 'I18N_OPENXPKI_CRYPTO_TOOL_SCEP_COMMAND_CREATE_ERROR_REPLY_CERTFILE_MISSING',
         );
     }
-    $ENV{pwd}    = $engine_of{$ident}->get_passwd();
+    my $pwd    = $engine_of{$ident}->get_passwd();
 
-    my $in_filename = $fu_of{$ident}->get_safe_tmpfile({
-        'TMP' => $tmp_of{$ident},
-    });
-    $outfile_of{$ident} = $fu_of{$ident}->get_safe_tmpfile({
-        'TMP' => $tmp_of{$ident},
-    });
-    $fu_of{$ident}->write_file({
-        FILENAME => $in_filename,
-        CONTENT  => $pkcs7_of{$ident},
-        FORCE    => 1,
-    });
+    my $cert;
+    open(my $fh, '<', $certfile) or die "cannot open file $certfile";
+    {
+        local $/;
+        $cert = <$fh>;
+    }
+    close($fh);
+
+    my $key;
+    open(my $fh, '<', $keyfile) or die "cannot open file $keyfile";
+    {
+        local $/;
+        $key = <$fh>;
+    }
+    close($fh);
 
     if ($error_of{$ident} !~ m{ badAlg | badMessageCheck | badRequest | badTime | badCertId }xms) {
         OpenXPKI::Exception->throw(
@@ -77,64 +75,19 @@ sub get_command {
         );
     }
 
-    my $command = " -new -passin env:pwd -signcert $certfile -msgtype CertRep -status FAILURE -failinfo $error_of{$ident} -keyfile $keyfile -inform DER -in $in_filename -outform DER -out $outfile_of{$ident} ";
-
-    if ($hash_alg_of{$ident}) {
-        $command .= ' -'.$hash_alg_of{$ident};
-    }
-
-    return $command;
+    my $sigalg = $hash_alg_of{$ident};
+    my $pwd    = $engine_of{$ident}->get_passwd();
+    my $transid = Crypt::LibSCEP::get_transaction_id($pkcs7_of{$ident});
+    my $senderNonce = Crypt::LibSCEP::get_senderNonce($pkcs7_of{$ident});
+    my $error_code = $error_of{$ident};
+    my $error_reply = Crypt::LibSCEP::create_error_reply_wop7({passin=>"pass", passwd=>$pwd, sigalg=>$sigalg}, $key, $cert, $transid, $senderNonce, $error_code);
+    $error_reply =~ s/\n?\z/\n/;
+    $error_reply =~ s/^(?:.*\n){1,1}//;
+    $error_reply =~ s/(?:.*\n){1,1}\z//;
+    use MIME::Base64;
+    return decode_base64($error_reply);
 }
 
-sub hide_output
-{
-    return 0;
-}
-
-sub key_usage
-{
-    return 0;
-}
-
-sub get_result
-{
-    my $self = shift;
-    my $ident = ident $self;
-
-    my $error_reply = $fu_of{$ident}->read_file($outfile_of{$ident});
-
-    return $error_reply;
-}
-
-sub cleanup {
-    $ENV{pwd} = '';
-}
 
 1;
 __END__
-
-=head1 Name
-
-OpenXPKI::Crypto::Tool::SCEP::Command::create_error_reply
-
-=head1 Functions
-
-=head2 get_command
-
-=over
-
-=item * PKCS7
-
-=back
-
-=head2 hide_output
-
-returns 0
-
-=head2 key_usage
-
-returns 0
-
-=head2 get_result
-
-Creates an SCEP ERROR reply with a given error code.

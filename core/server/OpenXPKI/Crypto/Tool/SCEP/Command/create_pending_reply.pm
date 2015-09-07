@@ -1,6 +1,6 @@
-## OpenXPKI::Crypto::Tool::SCEP::Command::create_pending_reply.pm
-## Written 2006 by Alexander Klink for the OpenXPKI project
-## (C) Copyright 2006 by The OpenXPKI Project
+## OpenXPKI::Crypto::Tool::SCEP::Command::create_pending_reply
+## Written 2015 by Gideon Knocke for the OpenXPKI project
+## (C) Copyright 20015 by The OpenXPKI Project
 package OpenXPKI::Crypto::Tool::SCEP::Command::create_pending_reply;
 
 use strict;
@@ -9,12 +9,8 @@ use warnings;
 use Class::Std;
 
 use OpenXPKI::Debug;
-use OpenXPKI::FileUtils;
-use Data::Dumper;
+use Crypt::LibSCEP;
 
-my %fu_of      :ATTR; # a FileUtils instance
-my %outfile_of :ATTR;
-my %tmp_of     :ATTR;
 my %pkcs7_of   :ATTR;
 my %engine_of  :ATTR;
 my %hash_alg_of  :ATTR;
@@ -22,18 +18,16 @@ my %hash_alg_of  :ATTR;
 sub START {
     my ($self, $ident, $arg_ref) = @_;
 
-    $fu_of    {$ident} = OpenXPKI::FileUtils->new();
     $engine_of{$ident} = $arg_ref->{ENGINE};
-    $tmp_of   {$ident} = $arg_ref->{TMP};
     $pkcs7_of {$ident} = $arg_ref->{PKCS7};
     $hash_alg_of {$ident} = $arg_ref->{HASH_ALG};
 }
 
-sub get_command {
-    my $self  = shift;
+sub get_result
+{
+    my $self = shift;
     my $ident = ident $self;
 
-    # keyfile, signcert, passin
     if (! defined $engine_of{$ident}) {
         OpenXPKI::Exception->throw(
             message => 'I18N_OPENXPKI_CRYPTO_TOOL_SCEP_COMMAND_CREATE_PENDING_REPLY_NO_ENGINE',
@@ -52,78 +46,58 @@ sub get_command {
             message => 'I18N_OPENXPKI_CRYPTO_TOOL_SCEP_COMMAND_CREATE_PENDING_REPLY_CERTFILE_MISSING',
         );
     }
-    $ENV{pwd}    = $engine_of{$ident}->get_passwd();
+    my $pwd    = $engine_of{$ident}->get_passwd();
 
-    my $in_filename = $fu_of{$ident}->get_safe_tmpfile({
-        'TMP' => $tmp_of{$ident},
-    });
-    $outfile_of{$ident} = $fu_of{$ident}->get_safe_tmpfile({
-        'TMP' => $tmp_of{$ident},
-    });
-    $fu_of{$ident}->write_file({
-        FILENAME => $in_filename,
-        CONTENT  => $pkcs7_of{$ident},
-        FORCE    => 1,
-    });
-
-    my $command = " -new -passin env:pwd -signcert $certfile -msgtype CertRep -status PENDING -keyfile $keyfile -inform DER -in $in_filename -outform DER -out $outfile_of{$ident} ";
-
-    if ($hash_alg_of{$ident}) {
-        $command .= ' -'.$hash_alg_of{$ident};
+    my $cert;
+    open(my $fh, '<', $certfile) or OpenXPKI::Exception->throw(
+            message => 'I18N_OPENXPKI_CRYPTO_TOOL_SCEP_COMMAND_CREATE_PENDING_REPLY_CANNOT_READ_CERT',
+        );
+    {
+        local $/;
+        $cert = <$fh>;
     }
+    close($fh);
 
-    return $command;
+    my $key;
+    open(my $fh, '<', $keyfile) or OpenXPKI::Exception->throw(
+            message => 'I18N_OPENXPKI_CRYPTO_TOOL_SCEP_COMMAND_CREATE_PENDING_REPLY_CANNOT_READ_KEY',
+        );
+    {
+        local $/;
+        $key = <$fh>;
+    }
+    close($fh);
+
+
+    my $sigalg = $hash_alg_of{$ident};
+    my $pwd    = $engine_of{$ident}->get_passwd();
+    my $transid = Crypt::LibSCEP::get_transaction_id($pkcs7_of{$ident});
+    if (!$transid) {
+        OpenXPKI::Exception->throw(
+            message => 'I18N_OPENXPKI_CRYPTO_TOOL_SCEP_COMMAND_CREATE_PENDING_REPLY_LIBSCEP_CANNOT_GET_TRANS_ID',
+        );
+    }
+    my $senderNonce = Crypt::LibSCEP::get_senderNonce($pkcs7_of{$ident});
+        if (!$senderNonce) {
+        OpenXPKI::Exception->throw(
+            message => 'I18N_OPENXPKI_CRYPTO_TOOL_SCEP_COMMAND_CREATE_PENDING_REPLY_LIBSCEP_CANNOT_GET_SENDERNONCE',
+        );
+    }
+    my $config = {passin=>"pass", passwd=>$pwd, sigalg=>$sigalg};
+    my $pending_reply = Crypt::LibSCEP::create_pending_reply_wop7($config, $key, $cert, $transid, $senderNonce);
+        if (!$pending_reply) {
+        OpenXPKI::Exception->throw(
+            message => 'I18N_OPENXPKI_CRYPTO_TOOL_SCEP_COMMAND_CREATE_PENDING_REPLY_LIBSCEP_CANNOT_SCEP_ERROR',
+        );
+    }
+    #PEM TO DER
+    $pending_reply =~ s/\n?\z/\n/;
+    $pending_reply =~ s/^(?:.*\n){1,1}//;
+    $pending_reply =~ s/(?:.*\n){1,1}\z//;
+    use MIME::Base64;
+    return decode_base64($pending_reply);
 }
 
-sub hide_output
-{
-    return 0;
-}
-
-sub key_usage
-{
-    return 0;
-}
-
-sub get_result
-{
-    my $self = shift;
-    my $ident = ident $self;
-
-    my $pending_reply = $fu_of{$ident}->read_file($outfile_of{$ident});
-
-    return $pending_reply;
-}
-
-sub cleanup {
-    $ENV{pwd} = '';
-}
 
 1;
 __END__
-
-=head1 Name
-
-OpenXPKI::Crypto::Tool::SCEP::Command::create_pending_reply
-
-=head1 Functions
-
-=head2 get_command
-
-=over
-
-=item * PKCS7
-
-=back
-
-=head2 hide_output
-
-returns 0
-
-=head2 key_usage
-
-returns 0
-
-=head2 get_result
-
-Creates an SCEP PENDING reply.

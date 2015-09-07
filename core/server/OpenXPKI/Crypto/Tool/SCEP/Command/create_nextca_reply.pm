@@ -1,5 +1,6 @@
-## OpenXPKI::Crypto::Tool::SCEP::Command::create_nextca_reply.pm
-## (C) Copyright 2013 by The OpenXPKI Project
+## OpenXPKI::Crypto::Tool::SCEP::Command::create_nextca_reply
+## Written 2015 by Gideon Knocke for the OpenXPKI project
+## (C) Copyright 20015 by The OpenXPKI Project
 package OpenXPKI::Crypto::Tool::SCEP::Command::create_nextca_reply;
 
 use strict;
@@ -8,12 +9,8 @@ use warnings;
 use Class::Std;
 
 use OpenXPKI::Debug;
-use OpenXPKI::FileUtils;
-use Data::Dumper;
+use Crypt::LibSCEP;
 
-my %fu_of      :ATTR; # a FileUtils instance
-my %outfile_of :ATTR;
-my %tmp_of     :ATTR;
 my %chain_of   :ATTR;
 my %engine_of  :ATTR;
 my %hash_alg_of  :ATTR;
@@ -21,19 +18,17 @@ my %hash_alg_of  :ATTR;
 sub START {
     my ($self, $ident, $arg_ref) = @_;
 
-    $fu_of    {$ident} = OpenXPKI::FileUtils->new();
     $engine_of{$ident} = $arg_ref->{ENGINE};
-    $tmp_of   {$ident} = $arg_ref->{TMP};
     $chain_of {$ident} = $arg_ref->{CHAIN};
     $hash_alg_of {$ident} = $arg_ref->{HASH_ALG};
 }
 
-sub get_command {
-    my $self  = shift;
+sub get_result
+{
+    my $self = shift;
     my $ident = ident $self;
 
-    # keyfile, signcert, passin
-    if (! defined $engine_of{$ident}) {
+     if (! defined $engine_of{$ident}) {
         OpenXPKI::Exception->throw(
             message => 'I18N_OPENXPKI_CRYPTO_TOOL_SCEP_COMMAND_CREATE_NEXTCA_REPLY_NO_ENGINE',
         );
@@ -52,79 +47,32 @@ sub get_command {
         );
     }
 
-    $ENV{pwd}    = $engine_of{$ident}->get_passwd();
-
-    my $chain_filename = $fu_of{$ident}->get_safe_tmpfile({
-        'TMP' => $tmp_of{$ident},
-    });
-    $outfile_of{$ident} = $fu_of{$ident}->get_safe_tmpfile({
-        'TMP' => $tmp_of{$ident},
-    });
-    $fu_of{$ident}->write_file({
-        FILENAME => $chain_filename,
-        CONTENT  => $chain_of{$ident},
-        FORCE    => 1,
-    });
-
-    my $command = " -new -passin env:pwd -signcert $certfile -msgtype GetNextCACert -keyfile $keyfile -nextCAfile $chain_filename -inform PEM -outform DER -out $outfile_of{$ident} ";
-
-    if ($hash_alg_of{$ident}) {
-        $command .= ' -'.$hash_alg_of{$ident};
+    my $cert;
+    open(my $fh, '<', $certfile) or die "cannot open file $certfile";
+    {
+        local $/;
+        $cert = <$fh>;
     }
+    close($fh);
 
-    ##! 16: 'scep cli ' . $command
-    return $command;
-}
+    my $key;
+    open(my $fh, '<', $keyfile) or die "cannot open file $keyfile";
+    {
+        local $/;
+        $key = <$fh>;
+    }
+    close($fh);
 
-sub hide_output
-{
-    return 0;
-}
-
-sub key_usage
-{
-    return 0;
-}
-
-sub get_result
-{
-    my $self = shift;
-    my $ident = ident $self;
-
-    my $pending_reply = $fu_of{$ident}->read_file($outfile_of{$ident});
-
-    return $pending_reply;
-}
-
-sub cleanup {
-    $ENV{pwd} = '';
+    my $sigalg = $hash_alg_of{$ident};
+    my $pwd    = $engine_of{$ident}->get_passwd();
+    my $chain = $chain_of{$ident};
+    my $nextca_reply = Crypt::LibSCEP::create_nextca_reply({passin=>"pass", passwd=>$pwd, sigalg=>$sigalg}, $chain, $cert, $key);
+    $nextca_reply =~ s/\n?\z/\n/;
+    $nextca_reply =~ s/^(?:.*\n){1,1}//;
+    $nextca_reply =~ s/(?:.*\n){1,1}\z//;
+    use MIME::Base64;
+    return decode_base64($nextca_reply);
 }
 
 1;
 __END__
-
-=head1 Name
-
-OpenXPKI::Crypto::Tool::SCEP::Command::create_nextca_reply
-
-=head1 Functions
-
-=head2 get_command
-
-=over
-
-=item * PKCS7
-
-=back
-
-=head2 hide_output
-
-returns 0
-
-=head2 key_usage
-
-returns 0
-
-=head2 get_result
-
-Creates an SCEP PENDING reply.

@@ -62,6 +62,9 @@ sub __init_command_params : PRIVATE {
         'get_getcert_serial' => {
             'PKCS7' => 1,
         },
+        'unwrap' => {
+            'PKCS7' => 1,
+        },
     });
 }
 

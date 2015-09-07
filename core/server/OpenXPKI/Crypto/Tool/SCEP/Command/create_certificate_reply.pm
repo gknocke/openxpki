@@ -1,6 +1,6 @@
-## OpenXPKI::Crypto::Tool::SCEP::Command::create_certificate_reply.pm
-## Written 2006 by Alexander Klink for the OpenXPKI project
-## (C) Copyright 2006 by The OpenXPKI Project
+## OpenXPKI::Crypto::Tool::SCEP::Command::create_certificate_reply
+## Written 2015 by Gideon Knocke for the OpenXPKI project
+## (C) Copyright 20015 by The OpenXPKI Project
 package OpenXPKI::Crypto::Tool::SCEP::Command::create_certificate_reply;
 
 use strict;
@@ -9,12 +9,8 @@ use warnings;
 use Class::Std;
 
 use OpenXPKI::Debug;
-use OpenXPKI::FileUtils;
-use Data::Dumper;
+use Crypt::LibSCEP;
 
-my %fu_of      :ATTR; # a FileUtils instance
-my %outfile_of :ATTR;
-my %tmp_of     :ATTR;
 my %pkcs7_of   :ATTR;
 my %cert_of    :ATTR;
 my %engine_of  :ATTR;
@@ -24,9 +20,7 @@ my %hash_alg_of  :ATTR;
 sub START {
     my ($self, $ident, $arg_ref) = @_;
 
-    $fu_of     {$ident} = OpenXPKI::FileUtils->new();
     $engine_of {$ident} = $arg_ref->{ENGINE};
-    $tmp_of    {$ident} = $arg_ref->{TMP};
     $pkcs7_of  {$ident} = $arg_ref->{PKCS7};
     $cert_of   {$ident} = $arg_ref->{CERTIFICATE};
     $enc_alg_of{$ident} = $arg_ref->{ENCRYPTION_ALG};
@@ -34,11 +28,11 @@ sub START {
 
 }
 
-sub get_command {
-    my $self  = shift;
+sub get_result
+{
+    my $self = shift;
     my $ident = ident $self;
 
-    # keyfile, signcert, passin
     if (! defined $engine_of{$ident}) {
         OpenXPKI::Exception->throw(
             message => 'I18N_OPENXPKI_CRYPTO_TOOL_SCEP_COMMAND_CREATE_PENDING_REPLY_NO_ENGINE',
@@ -57,92 +51,42 @@ sub get_command {
             message => 'I18N_OPENXPKI_CRYPTO_TOOL_SCEP_COMMAND_CREATE_PENDING_REPLY_CERTFILE_MISSING',
         );
     }
-    $ENV{pwd}    = $engine_of{$ident}->get_passwd();
+    my $pwd    = $engine_of{$ident}->get_passwd();
 
-    my $in_filename = $fu_of{$ident}->get_safe_tmpfile({
-        'TMP' => $tmp_of{$ident},
-    });
-    $outfile_of{$ident} = $fu_of{$ident}->get_safe_tmpfile({
-        'TMP' => $tmp_of{$ident},
-    });
-    $fu_of{$ident}->write_file({
-        FILENAME => $in_filename,
-        CONTENT  => $pkcs7_of{$ident},
-        FORCE    => 1,
-    });
-    my $issued_certfile = $fu_of{$ident}->get_safe_tmpfile({
-        'TMP' => $tmp_of{$ident},
-    });
-    $fu_of{$ident}->write_file({
-        FILENAME => $issued_certfile,
-        CONTENT  => $cert_of{$ident},
-        FORCE    => 1,
-    });
-
-    my $command = " -new -passin env:pwd -signcert $certfile -msgtype CertRep -status SUCCESS -keyfile $keyfile -inform DER -in $in_filename -outform DER -out $outfile_of{$ident} -issuedcert $issued_certfile ";
-
-    if ($enc_alg_of{$ident} eq 'DES') {
-        # if the configured encryption algorithm is DES, append the
-        # appropriate option. This is for example needed for
-        # Netscreen devices
-        $command .= " -des ";
+    my $cert;
+    open(my $fh, '<', $certfile) or die "cannot open file $certfile";
+    {
+        local $/;
+        $cert = <$fh>;
     }
+    close($fh);
 
-    if ($hash_alg_of{$ident}) {
-        $command .= ' -'.$hash_alg_of{$ident};
+    my $key;
+    open(my $fh, '<', $keyfile) or die "cannot open file $keyfile";
+    {
+        local $/;
+        $key = <$fh>;
     }
-    return $command;
+    close($fh);
+
+    my $encalg = $enc_alg_of{$ident};
+    if($encalg == '3DES') {
+        $encalg = 'des3';
+    }
+    my $sigalg = $hash_alg_of{$ident};
+    my $pwd    = $engine_of{$ident}->get_passwd();
+    my $transid = Crypt::LibSCEP::get_transaction_id($pkcs7_of{$ident});
+    my $senderNonce = Crypt::LibSCEP::get_senderNonce($pkcs7_of{$ident});
+    my $signerCert = Crypt::LibSCEP::get_signer_cert($pkcs7_of{$ident});
+    my $issuedCert = $cert_of{$ident};
+    my $pending_reply = Crypt::LibSCEP::create_certificate_reply_wop7({passin=>"pass", passwd=>$pwd, sigalg=>$sigalg, encalg=>$encalg}, $key, $cert, $transid, $senderNonce, $signerCert, $issuedCert, $cert);
+    $pending_reply =~ s/\n?\z/\n/;
+    $pending_reply =~ s/^(?:.*\n){1,1}//;
+    $pending_reply =~ s/(?:.*\n){1,1}\z//;
+    use MIME::Base64;
+    return decode_base64($pending_reply);
 }
 
-sub hide_output
-{
-    return 0;
-}
-
-sub key_usage
-{
-    return 0;
-}
-
-sub get_result
-{
-    my $self = shift;
-    my $ident = ident $self;
-
-    my $reply = $fu_of{$ident}->read_file($outfile_of{$ident});
-
-    return $reply;
-}
-
-sub cleanup {
-    $ENV{pwd} = '';
-}
 
 1;
 __END__
-
-=head1 Name
-
-OpenXPKI::Crypto::Tool::SCEP::Command::create_certificate_reply
-
-=head1 Functions
-
-=head2 get_command
-
-=over
-
-=item * PKCS7
-
-=back
-
-=head2 hide_output
-
-returns 0
-
-=head2 key_usage
-
-returns 0
-
-=head2 get_result
-
-Creates an SCEP reply containing the issued certificate.
