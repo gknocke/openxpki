@@ -18,17 +18,17 @@ sub START {
     $pkcs7_of{$ident} = $arg_ref->{PKCS7};
 }
 
-
-
 sub get_result
 {
     my $self = shift;
     my $ident = ident $self;
-
-    my $transid =  Crypt::LibSCEP::get_transaction_id($pkcs7_of{$ident});
-    if(!$transid) {
+    my $transid;
+    eval {
+        $transid =  Crypt::LibSCEP::get_transaction_id($pkcs7_of{$ident});
+    };
+    if ($@) {
         OpenXPKI::Exception->throw(
-            message => 'I18N_OPENXPKI_CRYPTO_TOOL_SCEP_COMMAND_GET_TRANSACTION_ID_LIBSCEP_FAILED',
+            message => $@,
         );
     }
     return $transid;

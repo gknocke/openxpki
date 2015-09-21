@@ -13,9 +13,13 @@ use Crypt::LibSCEP;
 
 my %pkcs7_of :ATTR;
 my %engine_of  :ATTR;
+my %fu_of      :ATTR;
+
 
 sub START {
     my ($self, $ident, $arg_ref) = @_;
+
+    $fu_of{$ident} = OpenXPKI::FileUtils->new();
     $pkcs7_of{$ident} = $arg_ref->{PKCS7};
     $engine_of{$ident} = $arg_ref->{ENGINE};
 }
@@ -44,36 +48,20 @@ sub get_result
         );
     }
     my $pwd    = $engine_of{$ident}->get_passwd();
-
-    my $cert;
-    open(my $fh, '<', $certfile) or OpenXPKI::Exception->throw(
-            message => 'I18N_OPENXPKI_CRYPTO_TOOL_SCEP_COMMAND_UNWRAP_CANNOT_READ_CERT',
-        );
-    {
-        local $/;
-        $cert = <$fh>;
-    }
-    close($fh);
-
-    my $key;
-    open(my $fh, '<', $keyfile) or OpenXPKI::Exception->throw(
-            message => 'I18N_OPENXPKI_CRYPTO_TOOL_SCEP_COMMAND_UNWRAP_CANNOT_READ_KEY',
-        );
-    {
-        local $/;
-        $key = <$fh>;
-    }
-    close($fh);
+    my $cert = $fu_of{$ident}->read_file($certfile);
+    my $key = $fu_of{$ident}->read_file($keyfile);
     my $config = {passin=>"pass", passwd=>$pwd};
     my $pkcs7 = $pkcs7_of{$ident};
-    my $scep_handle = Crypt::LibSCEP::unwrap($config, $pkcs7, $cert, $cert, $key);
-    if(!$scep_handle) {
+    my $scep_handle;
+    eval {
+        $scep_handle = Crypt::LibSCEP::unwrap($config, $pkcs7, $cert, $cert, $key);
+    };
+    if ($@) {
         OpenXPKI::Exception->throw(
-            message => 'I18N_OPENXPKI_CRYPTO_TOOL_SCEP_COMMAND_UNWRAP_LIBSCEP_FAILED',
+            message => $@,
         );
     }
     return $scep_handle;
-
 
 }
 

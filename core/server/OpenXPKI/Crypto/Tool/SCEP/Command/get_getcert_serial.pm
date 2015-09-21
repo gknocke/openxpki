@@ -22,10 +22,13 @@ sub get_result
 {
     my $self = shift;
     my $ident = ident $self;
-    my $serial = Crypt::LibSCEP::get_getcert_serial($pkcs7_of{$ident});
-    if(!$serial) {
+    my $serial;
+    eval {
+        $serial = Crypt::LibSCEP::get_getcert_serial($pkcs7_of{$ident});
+    };
+    if ($@) {
         OpenXPKI::Exception->throw(
-            message => 'I18N_OPENXPKI_CRYPTO_TOOL_SCEP_COMMAND_GET_GETCERT_SERIAL_LIBSCEP_FAILED',
+            message => $@,
         );
     }
     return $serial;

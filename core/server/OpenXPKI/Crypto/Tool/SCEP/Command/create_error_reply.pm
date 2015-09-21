@@ -10,15 +10,19 @@ use Class::Std;
 
 use OpenXPKI::Debug;
 use Crypt::LibSCEP;
+use MIME::Base64;
 
 my %pkcs7_of   :ATTR;
 my %engine_of  :ATTR;
 my %error_of   :ATTR;
 my %hash_alg_of  :ATTR;
+my %fu_of      :ATTR;
+
 
 sub START {
     my ($self, $ident, $arg_ref) = @_;
 
+    $fu_of{$ident} = OpenXPKI::FileUtils->new();
     $engine_of{$ident} = $arg_ref->{ENGINE};
     $pkcs7_of {$ident} = $arg_ref->{PKCS7};
     $error_of {$ident} = $arg_ref->{'ERROR_CODE'};
@@ -50,21 +54,8 @@ sub get_result
     }
     my $pwd    = $engine_of{$ident}->get_passwd();
 
-    my $cert;
-    open(my $fh, '<', $certfile) or die "cannot open file $certfile";
-    {
-        local $/;
-        $cert = <$fh>;
-    }
-    close($fh);
-
-    my $key;
-    open(my $fh, '<', $keyfile) or die "cannot open file $keyfile";
-    {
-        local $/;
-        $key = <$fh>;
-    }
-    close($fh);
+    my $cert = $fu_of{$ident}->read_file($certfile);
+    my $key = $fu_of{$ident}->read_file($keyfile);
 
     if ($error_of{$ident} !~ m{ badAlg | badMessageCheck | badRequest | badTime | badCertId }xms) {
         OpenXPKI::Exception->throw(
@@ -77,14 +68,37 @@ sub get_result
 
     my $sigalg = $hash_alg_of{$ident};
     my $pwd    = $engine_of{$ident}->get_passwd();
-    my $transid = Crypt::LibSCEP::get_transaction_id($pkcs7_of{$ident});
-    my $senderNonce = Crypt::LibSCEP::get_senderNonce($pkcs7_of{$ident});
     my $error_code = $error_of{$ident};
-    my $error_reply = Crypt::LibSCEP::create_error_reply_wop7({passin=>"pass", passwd=>$pwd, sigalg=>$sigalg}, $key, $cert, $transid, $senderNonce, $error_code);
+    my $transid;
+    my $senderNonce;
+    my $error_reply;
+    eval {
+        $transid = Crypt::LibSCEP::get_transaction_id($pkcs7_of{$ident});
+    };
+    if ($@) {
+        OpenXPKI::Exception->throw(
+            message => $@,
+        );
+    }
+    eval {
+        $senderNonce = Crypt::LibSCEP::get_senderNonce($pkcs7_of{$ident});
+    };
+    if ($@) {
+        OpenXPKI::Exception->throw(
+            message => $@,
+        );
+    }
+    eval {
+        $error_reply = Crypt::LibSCEP::create_error_reply_wop7({passin=>"pass", passwd=>$pwd, sigalg=>$sigalg}, $key, $cert, $transid, $senderNonce, $error_code);
+    };   
+    if ($@) {
+        OpenXPKI::Exception->throw(
+            message => $@,
+        );
+    }
     $error_reply =~ s/\n?\z/\n/;
     $error_reply =~ s/^(?:.*\n){1,1}//;
     $error_reply =~ s/(?:.*\n){1,1}\z//;
-    use MIME::Base64;
     return decode_base64($error_reply);
 }
 

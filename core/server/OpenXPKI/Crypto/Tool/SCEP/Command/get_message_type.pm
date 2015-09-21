@@ -22,10 +22,13 @@ sub get_result
 {
     my $self = shift;
     my $ident = ident $self;
-    my $message_type = Crypt::LibSCEP::get_message_type($pkcs7_of{$ident});
-    if(!$message_type) {
+    my $message_type;
+    eval {
+        $message_type = Crypt::LibSCEP::get_message_type($pkcs7_of{$ident});
+    };
+    if ($@) {
         OpenXPKI::Exception->throw(
-            message => 'I18N_OPENXPKI_CRYPTO_TOOL_SCEP_COMMAND_GET_MESSAGE_TYPE_LIBSCEP_FAILED',
+            message => $@,
         );
     }
     return $message_type;

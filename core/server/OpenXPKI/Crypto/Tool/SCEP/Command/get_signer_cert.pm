@@ -22,12 +22,14 @@ sub get_result
 {
     my $self = shift;
     my $ident = ident $self;
-
-    my $signerCert = Crypt::LibSCEP::get_signer_cert($pkcs7_of{$ident});
-    if(!$signerCert) {
+    my $signerCert;
+    eval {
+        $signerCert = Crypt::LibSCEP::get_signer_cert($pkcs7_of{$ident});
+    };
+    if ($@) {
         OpenXPKI::Exception->throw(
-                message => 'I18N_OPENXPKI_CRYPTO_TOOL_SCEP_COMMAND_GET_SIGNER_CERT_LIBSCEP_FAILED',
-            );
+            message => $@,
+        );
     }
     return $signerCert;
 }

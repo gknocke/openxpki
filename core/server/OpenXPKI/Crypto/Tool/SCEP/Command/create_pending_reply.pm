@@ -10,14 +10,17 @@ use Class::Std;
 
 use OpenXPKI::Debug;
 use Crypt::LibSCEP;
+use OpenXPKI::FileUtils;
+use MIME::Base64;
 
 my %pkcs7_of   :ATTR;
 my %engine_of  :ATTR;
 my %hash_alg_of  :ATTR;
+my %fu_of      :ATTR;
 
 sub START {
     my ($self, $ident, $arg_ref) = @_;
-
+    $fu_of{$ident} = OpenXPKI::FileUtils->new();
     $engine_of{$ident} = $arg_ref->{ENGINE};
     $pkcs7_of {$ident} = $arg_ref->{PKCS7};
     $hash_alg_of {$ident} = $arg_ref->{HASH_ALG};
@@ -47,54 +50,42 @@ sub get_result
         );
     }
     my $pwd    = $engine_of{$ident}->get_passwd();
-
-    my $cert;
-    open(my $fh, '<', $certfile) or OpenXPKI::Exception->throw(
-            message => 'I18N_OPENXPKI_CRYPTO_TOOL_SCEP_COMMAND_CREATE_PENDING_REPLY_CANNOT_READ_CERT',
-        );
-    {
-        local $/;
-        $cert = <$fh>;
-    }
-    close($fh);
-
-    my $key;
-    open(my $fh, '<', $keyfile) or OpenXPKI::Exception->throw(
-            message => 'I18N_OPENXPKI_CRYPTO_TOOL_SCEP_COMMAND_CREATE_PENDING_REPLY_CANNOT_READ_KEY',
-        );
-    {
-        local $/;
-        $key = <$fh>;
-    }
-    close($fh);
-
-
+    my $cert = $fu_of{$ident}->read_file($certfile);
+    my $key = $fu_of{$ident}->read_file($keyfile);
     my $sigalg = $hash_alg_of{$ident};
     my $pwd    = $engine_of{$ident}->get_passwd();
-    my $transid = Crypt::LibSCEP::get_transaction_id($pkcs7_of{$ident});
-    if (!$transid) {
-        OpenXPKI::Exception->throw(
-            message => 'I18N_OPENXPKI_CRYPTO_TOOL_SCEP_COMMAND_CREATE_PENDING_REPLY_LIBSCEP_CANNOT_GET_TRANS_ID',
-        );
-    }
-    my $senderNonce = Crypt::LibSCEP::get_senderNonce($pkcs7_of{$ident});
-        if (!$senderNonce) {
-        OpenXPKI::Exception->throw(
-            message => 'I18N_OPENXPKI_CRYPTO_TOOL_SCEP_COMMAND_CREATE_PENDING_REPLY_LIBSCEP_CANNOT_GET_SENDERNONCE',
-        );
-    }
     my $config = {passin=>"pass", passwd=>$pwd, sigalg=>$sigalg};
-    my $pending_reply = Crypt::LibSCEP::create_pending_reply_wop7($config, $key, $cert, $transid, $senderNonce);
-        if (!$pending_reply) {
+    my $transid;
+    my $senderNonce;
+    my $pending_reply;
+    eval {
+        $transid = Crypt::LibSCEP::get_transaction_id($pkcs7_of{$ident});
+    };
+    if ($@) {
         OpenXPKI::Exception->throw(
-            message => 'I18N_OPENXPKI_CRYPTO_TOOL_SCEP_COMMAND_CREATE_PENDING_REPLY_LIBSCEP_CANNOT_SCEP_ERROR',
+            message => $@,
+        );
+    }
+    eval {
+        $senderNonce = Crypt::LibSCEP::get_senderNonce($pkcs7_of{$ident});
+    };
+    if ($@) {
+        OpenXPKI::Exception->throw(
+            message => $@,
+        );
+    }
+    eval{
+        $pending_reply = Crypt::LibSCEP::create_pending_reply_wop7($config, $key, $cert, $transid, $senderNonce);
+    };
+    if ($@) {
+        OpenXPKI::Exception->throw(
+            message => $@,
         );
     }
     #PEM TO DER
     $pending_reply =~ s/\n?\z/\n/;
     $pending_reply =~ s/^(?:.*\n){1,1}//;
     $pending_reply =~ s/(?:.*\n){1,1}\z//;
-    use MIME::Base64;
     return decode_base64($pending_reply);
 }
 
