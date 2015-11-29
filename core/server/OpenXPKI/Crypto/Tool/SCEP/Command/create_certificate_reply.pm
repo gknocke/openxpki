@@ -61,15 +61,14 @@ sub get_result
     my $key = $fu_of{$ident}->read_file($keyfile);
 
     my $encalg = $enc_alg_of{$ident};
-    if($encalg == '3DES') {
+    if($encalg eq '3DES') {
         $encalg = 'des3';
     }
     my $sigalg = $hash_alg_of{$ident};
-    my $pwd    = $engine_of{$ident}->get_passwd();
     my $issuedCert = $cert_of{$ident};
     my $transid;
     my $senderNonce;
-    my $signerCert;
+    my $enc_cert;
     my $pending_reply;
     eval {
         $transid = Crypt::LibSCEP::get_transaction_id($pkcs7_of{$ident});
@@ -88,7 +87,8 @@ sub get_result
         );
     }
     eval{
-        $signerCert = Crypt::LibSCEP::get_signer_cert($pkcs7_of{$ident});
+    	#yes, we use the signer cert for encryption
+        $enc_cert = Crypt::LibSCEP::get_signer_cert($pkcs7_of{$ident});
     };
     if($@) {
         OpenXPKI::Exception->throw(
@@ -96,7 +96,7 @@ sub get_result
         );
     }
     eval {
-        $pending_reply = Crypt::LibSCEP::create_certificate_reply_wop7({passin=>"pass", passwd=>$pwd, sigalg=>$sigalg, encalg=>$encalg}, $key, $cert, $transid, $senderNonce, $signerCert, $issuedCert, $cert);
+        $pending_reply = Crypt::LibSCEP::create_certificate_reply_wop7({passin=>"pass", passwd=>$pwd, sigalg=>$sigalg, encalg=>$encalg}, $key, $cert, $transid, $senderNonce, $enc_cert, $issuedCert);
     };
     if($@) {
         OpenXPKI::Exception->throw(

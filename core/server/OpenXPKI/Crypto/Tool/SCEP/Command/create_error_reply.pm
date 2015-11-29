@@ -67,7 +67,6 @@ sub get_result
     }
 
     my $sigalg = $hash_alg_of{$ident};
-    my $pwd    = $engine_of{$ident}->get_passwd();
     my $error_code = $error_of{$ident};
     my $transid;
     my $senderNonce;

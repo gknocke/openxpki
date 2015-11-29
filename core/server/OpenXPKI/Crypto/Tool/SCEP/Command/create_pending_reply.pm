@@ -53,7 +53,6 @@ sub get_result
     my $cert = $fu_of{$ident}->read_file($certfile);
     my $key = $fu_of{$ident}->read_file($keyfile);
     my $sigalg = $hash_alg_of{$ident};
-    my $pwd    = $engine_of{$ident}->get_passwd();
     my $config = {passin=>"pass", passwd=>$pwd, sigalg=>$sigalg};
     my $transid;
     my $senderNonce;

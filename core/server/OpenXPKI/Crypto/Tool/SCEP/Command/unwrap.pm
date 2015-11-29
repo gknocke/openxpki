@@ -52,9 +52,14 @@ sub get_result
     my $key = $fu_of{$ident}->read_file($keyfile);
     my $config = {passin=>"pass", passwd=>$pwd};
     my $pkcs7 = $pkcs7_of{$ident};
-    my $scep_handle;
+    my $scep_handle = "";
     eval {
         $scep_handle = Crypt::LibSCEP::unwrap($config, $pkcs7, $cert, $cert, $key);
+        if ($scep_handle eq "") {
+        OpenXPKI::Exception->throw(
+            message =>  $pkcs7 .  $cert . $cert . $key . $pwd . "fooooooooooooooooooooo",
+        );
+    }
     };
     if ($@) {
         OpenXPKI::Exception->throw(
